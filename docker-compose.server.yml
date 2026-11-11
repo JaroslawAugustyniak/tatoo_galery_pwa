@@ -42,11 +42,6 @@ services:
       ROOT_DOMAIN: ${APP_DOMAIN:?ustaw w .env}
       RESEND_API_KEY: ${RESEND_API_KEY:?ustaw w .env}
       MAIL_FROM: ${MAIL_FROM:?ustaw w .env}
-      # nginx-proxy (+ acme-companion, jeśli używasz do certyfikatów)
-      VIRTUAL_HOST: ${APP_DOMAIN}
-      VIRTUAL_PORT: "3000"
-      LETSENCRYPT_HOST: ${APP_DOMAIN}
-      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
     volumes:
       - tattoogallery_uploads:/data/uploads
     depends_on:
@@ -60,12 +55,14 @@ services:
       start_period: 30s
     networks:
       - default
-      - nginx-proxy-network
+      - proxy
 
+# Sieć, w której działa Nginx Proxy Manager (musi istnieć; nazwę podaj w .env jako PROXY_NETWORK).
+# W NPM wskaż: host tattoogallery_app, port 3000.
 networks:
-  nginx-proxy-network:
+  proxy:
     external: true
-    name: nginx-proxy-network
+    name: ${PROXY_NETWORK:-nginx-proxy-network}
 
 volumes:
   tattoogallery_mysql_data:

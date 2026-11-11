@@ -5,13 +5,14 @@ Push na `main` uruchamia pipeline: **test** (`tsc`) → **build** obrazu (target
 
 ## 1. Jednorazowa konfiguracja serwera
 
-Wymagania: Docker + Compose v2, działający **nginx-proxy** (z acme-companion do certyfikatów) w sieci
-`nginx-proxy-network`, rekord DNS `A` domeny `tatoo.asapcreative.agency` wskazujący na IP serwera. HTTPS jest obowiązkowy – bez niego
+Wymagania: Docker + Compose v2, działający **Nginx Proxy Manager** (NPM), rekord DNS `A` domeny `tatoo.asapcreative.agency` wskazujący na IP serwera. HTTPS jest obowiązkowy – bez niego
 Service Worker (tryb offline) i cookie sesji (`Secure`) nie zadziałają.
 
 ```bash
 mkdir -p ~/docker/tatoo_gallery
-docker network ls | grep nginx-proxy-network        # sieć musi istnieć
+# sieć, w której działa NPM -> wpisz jej nazwę w .env jako PROXY_NETWORK:
+docker inspect $(docker ps --filter name=nginx-proxy-manager -q | head -1) \
+  --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
 cd ~/docker/tatoo_gallery
 # wzór: .env.server.example z repozytorium -> .env, uzupełnij WSZYSTKIE wartości
 chmod 600 .env
@@ -25,6 +26,33 @@ ssh-keygen -t ed25519 -f deploy_key -C "gh-actions-deploy" -N ""   # lokalnie
 # deploy_key.pub -> ~/.ssh/authorized_keys na serwerze
 ssh-keyscan -p 22 TWOJ_SERWER                          # -> sekret SSH_KNOWN_HOSTS
 ```
+
+## 1a. Nginx Proxy Manager
+
+Po pierwszym deployu (kontener `tattoogallery_app` musi działać) dodaj w NPM **Proxy Host**:
+
+| Pole | Wartość |
+|---|---|
+| Domain Names | `tatoo.asapcreative.agency` |
+| Scheme | `http` |
+| Forward Hostname / IP | `tattoogallery_app` |
+| Forward Port | `3000` |
+| Block Common Exploits | włączone |
+| Websockets Support | opcjonalnie |
+
+Zakładka **SSL**: *Request a new SSL Certificate* (Let's Encrypt), *Force SSL*, *HTTP/2*. Rekord DNS `A`
+musi już wskazywać na serwer (jeśli domena jest za proxy CDN, wyłącz je na czas wystawiania certyfikatu).
+
+Zakładka **Advanced** (wklej obowiązkowo, inaczej wgrywanie zdjęć kończy się błędem 413):
+
+```nginx
+client_max_body_size 35m;
+proxy_read_timeout 120s;
+proxy_send_timeout 120s;
+```
+
+NPM musi być w tej samej sieci Dockera co aplikacja (`PROXY_NETWORK`), inaczej nie rozwiąże nazwy
+`tattoogallery_app`. Alternatywa: w polu Forward Hostname użyj IP kontenera (niestabilne po restarcie).
 
 ## 2. Sekrety GitHub (repo `JaroslawAugustyniak/tatoo_galery_pwa` → Settings → Secrets and variables → Actions)
 
@@ -75,6 +103,6 @@ docker run --rm -v tattoogallery_uploads:/data -v "$PWD":/out alpine tar czf /ou
 ## 5. Uwagi
 
 - Subdomeny tatuatorów (`slug.domena`) nie są włączone: galerie działają pod `/t/slug`. Włączenie wymaga
-  wildcard DNS i certyfikatu wildcard (DNS-01) oraz `VIRTUAL_HOST` z `*.domena`.
+  wildcard DNS i certyfikatu wildcard (DNS-01) oraz osobny Proxy Host z `*.domena`.
 - `docker-compose.yml` to środowisko lokalne (kod z bind mounta, `next dev`). Serwer używa wyłącznie
   `docker-compose.server.yml`.
