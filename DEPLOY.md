@@ -27,6 +27,12 @@ ssh-keygen -t ed25519 -f deploy_key -C "gh-actions-deploy" -N ""   # lokalnie
 ssh-keyscan -p 22 TWOJ_SERWER                          # -> sekret SSH_KNOWN_HOSTS
 ```
 
+## 1. Baza danych
+
+Aplikacja nie uruchamia własnego MySQL – korzysta ze **wspólnej instancji** serwera (patrz
+[docs/DB-CONSOLIDATION.md](docs/DB-CONSOLIDATION.md)). W `.env` na serwerze podaj `DB_HOST` (nazwa kontenera
+MySQL), `DB_NETWORK` (wspólna sieć Dockera) oraz dane bazy `tattoogallery` i jej użytkownika.
+
 ## 1a. Nginx Proxy Manager
 
 Po pierwszym deployu (kontener `tattoogallery_app` musi działać) dodaj w NPM **Proxy Host**:
@@ -91,13 +97,14 @@ echo 'IMAGE_REF=ghcr.io/<owner>/<repo>:<poprzedni-sha>' > image.env && dc up -d 
 Migracje wykonują się tylko „do przodu”. Rollback do obrazu ze starszym schematem bazy wymaga ręcznego
 przywrócenia kopii bazy.
 
-### Kopie zapasowe (ustaw w cronie)
+### Kopie zapasowe
+
+Baza jest we wspólnej instancji MySQL – jej kopie opisuje [docs/DB-CONSOLIDATION.md](docs/DB-CONSOLIDATION.md#4-kopie-zapasowe-wspólnej-instancji-cron).
+Zdjęcia (wolumen uploadów tej aplikacji):
 
 ```bash
-# baza
-docker exec tattoogallery_db sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction "$MYSQL_DATABASE"' | gzip > backup-db-$(date +%F).sql.gz
-# zdjęcia (wolumen uploadów)
-docker run --rm -v tattoogallery_uploads:/data -v "$PWD":/out alpine tar czf /out/backup-uploads-$(date +%F).tgz -C /data .
+docker run --rm -v tattoogallery_tattoogallery_uploads:/data -v "$PWD":/out alpine \
+  tar czf /out/backup-uploads-$(date +%F).tgz -C /data .
 ```
 
 ## 5. Współdzielony serwer – zasady bezpieczeństwa
@@ -106,7 +113,7 @@ docker run --rm -v tattoogallery_uploads:/data -v "$PWD":/out alpine tar czf /ou
   (działałyby poza tym projektem).
 - Serwis nazywa się `tattoogallery-web`, bo nazwa serwisu to alias DNS w sieci NPM – nazwa `app` mogłaby
   kolidować z innymi projektami. W NPM kieruj ruch na **nazwę kontenera** `tattoogallery_app`.
-- Kontenery mają limity pamięci (`MYSQL_MEM_LIMIT`, `APP_MEM_LIMIT`, domyślnie 768m każdy).
+- Kontener aplikacji ma limit pamięci (`APP_MEM_LIMIT`, domyślnie 768m).
 - Awaryjne zatrzymanie tylko tej aplikacji: `dc down` (nie usuwa wolumenów).
 
 ## 6. Uwagi

@@ -1,37 +1,15 @@
 # Produkcyjny compose na serwerze. Uruchamiany przez GitHub Actions:
 #   docker compose --env-file .env --env-file image.env -f docker-compose.server.yml up -d
-# .env     - sekrety (tworzony ręcznie raz na serwerze, patrz DEPLOY.md)
+# .env      - sekrety (tworzony ręcznie raz na serwerze, patrz DEPLOY.md)
 # image.env - IMAGE_REF=ghcr.io/<owner>/<repo>:<sha> (zapisywany przez workflow)
+#
+# Baza danych: WSPÓLNA instancja MySQL serwera (nie uruchamiamy własnej – oszczędność ~500 MB RAM).
+# Aplikacja łączy się z nią po nazwie kontenera przez sieć DB_NETWORK.
 name: tattoogallery
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: tattoogallery_db
-    restart: unless-stopped
-    mem_limit: ${MYSQL_MEM_LIMIT:-768m}
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?ustaw w .env}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:?ustaw w .env}
-      MYSQL_USER: ${MYSQL_USER:?ustaw w .env}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?ustaw w .env}
-    command: >
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --performance-schema=OFF
-    volumes:
-      - tattoogallery_mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 20s
-    networks:
-      - default
-
-  # Nazwa serwisu staje się aliasem DNS w sieci NPM - musi być unikalna na serwerze (NIE "app"),
-  # inaczej NPM innych projektów mógłby trafiać do tego kontenera.
+  # Nazwa serwisu staje się aliasem DNS w sieciach, do których należy – musi być unikalna na serwerze
+  # (NIE "app"), inaczej mogłaby kolidować z innymi projektami.
   tattoogallery-web:
     image: ${IMAGE_REF:?brak IMAGE_REF - użyj --env-file image.env}
     container_name: tattoogallery_app
@@ -42,7 +20,8 @@ services:
       - "3000"
     environment:
       NODE_ENV: production
-      DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+      # hasło bez znaków specjalnych (np. openssl rand -hex 16), bo trafia do URL-a
+      DATABASE_URL: mysql://${MYSQL_USER:?ustaw w .env}:${MYSQL_PASSWORD:?ustaw w .env}@${DB_HOST:?ustaw w .env}:${DB_PORT:-3306}/${MYSQL_DATABASE:?ustaw w .env}
       UPLOAD_DIR: /data/uploads
       SESSION_SECRET: ${SESSION_SECRET:?ustaw w .env}
       COOKIE_SECURE: "true"
@@ -51,26 +30,26 @@ services:
       MAIL_FROM: ${MAIL_FROM:?ustaw w .env}
     volumes:
       - tattoogallery_uploads:/data/uploads
-    depends_on:
-      mysql:
-        condition: service_healthy
     healthcheck:
+      # 401 z /api/auth/me = aplikacja żyje (endpoint nie odpytuje bazy bez sesji)
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/auth/me').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 30s
+      start_period: 40s
     networks:
-      - default
       - proxy
+      - db
 
-# Sieć, w której działa Nginx Proxy Manager (musi istnieć; nazwę podaj w .env jako PROXY_NETWORK).
-# W NPM wskaż: host tattoogallery_app, port 3000.
 networks:
+  # Sieć, w której działa Nginx Proxy Manager. W NPM wskaż: host tattoogallery_app, port 3000.
   proxy:
     external: true
     name: ${PROXY_NETWORK:-nginx-proxy-network}
+  # Sieć wspólnej bazy MySQL (musi istnieć, patrz docs/DB-CONSOLIDATION.md).
+  db:
+    external: true
+    name: ${DB_NETWORK:?ustaw w .env}
 
 volumes:
-  tattoogallery_mysql_data:
   tattoogallery_uploads:
