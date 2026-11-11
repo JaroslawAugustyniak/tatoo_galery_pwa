@@ -1,0 +1,118 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  build:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: |
+          # nazwy obrazów w GHCR muszą być pisane małymi literami
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          target: prod
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+            ${{ steps.meta.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/tattoo-gallery' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Konfiguracja SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # klucz hosta z sekretu (bez ślepego akceptowania nieznanego serwera)
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<CFG
+          Host deploy
+            HostName ${{ secrets.SSH_HOST }}
+            User ${{ secrets.SSH_USER }}
+            Port ${SSH_PORT}
+            IdentityFile ~/.ssh/id_deploy
+            StrictHostKeyChecking yes
+          CFG
+
+      - name: Wgraj compose
+        run: |
+          ssh deploy "mkdir -p '${DEPLOY_PATH}'"
+          scp docker-compose.server.yml "deploy:${DEPLOY_PATH}/docker-compose.server.yml"
+
+      - name: Deploy
+        env:
+          IMAGE_REF: ${{ needs.build.outputs.image }}:${{ github.sha }}
+          GHCR_USER: ${{ github.repository_owner }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          # token do pobrania obrazu idzie przez stdin, nie przez argumenty procesu
+          ssh deploy "cd '${DEPLOY_PATH}' && test -f .env || { echo 'Brak .env na serwerze (patrz DEPLOY.md)'; exit 1; }"
+          if [ -n "$GHCR_TOKEN" ]; then
+            echo "$GHCR_TOKEN" | ssh deploy "docker login ghcr.io -u '${GHCR_USER}' --password-stdin"
+          fi
+          ssh deploy "cd '${DEPLOY_PATH}' \
+            && echo 'IMAGE_REF=${IMAGE_REF}' > image.env \
+            && docker compose --env-file .env --env-file image.env -f docker-compose.server.yml pull app \
+            && docker compose --env-file .env --env-file image.env -f docker-compose.server.yml up -d --remove-orphans \
+            && docker image prune -f >/dev/null"
+
+      - name: Czekaj na zdrowy kontener
+        run: |
+          ssh deploy 'for i in $(seq 1 40); do
+            s=$(docker inspect -f "{{.State.Health.Status}}" tattoogallery_app 2>/dev/null)
+            echo "health: $s"; [ "$s" = healthy ] && exit 0; sleep 5
+          done
+          docker logs --tail 60 tattoogallery_app; exit 1'

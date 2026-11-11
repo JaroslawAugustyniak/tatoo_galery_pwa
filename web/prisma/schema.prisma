@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// Tenant = tatuator. Wszystkie dane galerii wiszą na artistId (row-level isolation).
+model Artist {
+  id              String          @id @default(cuid())
+  name            String
+  slug            String          @unique
+  email           String          @unique
+  passwordHash    String
+  avatarUrl       String?         @db.VarChar(512)
+  emailVerifiedAt DateTime?
+  categories      Category[]
+  challenges      AuthChallenge[]
+  artworks        Artwork[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  artistId  String
+  artist    Artist    @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String
+  avatarUrl String    @db.VarChar(512)
+  order     Int       @default(0)
+  artworks  Artwork[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([artistId, slug])
+}
+
+model Artwork {
+  id          String   @id @default(cuid())
+  artistId    String
+  artist      Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  title       String?
+  displayUrl  String   @db.VarChar(512)
+  originalUrl String?  @db.VarChar(512)
+  blurDataUrl String?  @db.Text
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([artistId, categoryId])
+}
+
+enum AuthPurpose {
+  LOGIN
+  RESET
+}
+
+/// Jednorazowy kod 6-cyfrowy wysyłany mailem (2FA przy logowaniu/rejestracji, reset hasła).
+/// artistId = null => "wyzwanie wabik" dla nieistniejącego maila (brak enumeracji kont).
+model AuthChallenge {
+  id         String      @id
+  email      String
+  artistId   String?
+  artist     Artist?     @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  purpose    AuthPurpose
+  codeHash   String
+  attempts   Int         @default(0)
+  resends    Int         @default(0)
+  lastSentAt DateTime
+  expiresAt  DateTime
+  createdAt  DateTime    @default(now())
+
+  @@index([email, purpose])
+  @@index([expiresAt])
+}

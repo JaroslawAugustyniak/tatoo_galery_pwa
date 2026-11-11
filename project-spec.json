@@ -1,0 +1,111 @@
+{
+  "projectName": "Tattoo Gallery PWA (Multi-Tenant)",
+  "version": "1.2.0",
+  "architecture": {
+    "frontend": "Next.js 14+ (App Router, PWA, Tailwind CSS)",
+    "backend": "Next.js API Routes / Node.js",
+    "database": "MySQL 8.0 (Prisma ORM)",
+    "storage": "Local Volume with isolated tenant folders (/uploads/tenants/{tenantId}/...)",
+    "containerization": "Docker & Docker Compose",
+    "proxy": {
+      "type": "Nginx Proxy",
+      "network": "proxy-net",
+      "localUrl": "http://tattoo.localhost",
+      "virtualPort": 3000,
+      "wildcardSupport": "*.tattoo.localhost (Subdomain-based tenant routing support)"
+    },
+    "multiTenancy": {
+      "type": "Row-Level Isolation (Single Database, Shared Schema)",
+      "tenantResolution": "Subdomain (e.g. janedoe.tattoo.localhost) or Route Slug (e.g. tattoo.localhost/t/janedoe)",
+      "storageIsolation": "Per-tenant filesystem separation"
+    }
+  },
+  "coreFeatures": {
+    "pwa": {
+      "framework": "@serwist/next",
+      "display": "standalone",
+      "cachingStrategy": "Stale-While-Revalidate / Cache First for optimized images",
+      "offlineCapabilities": "Full gallery navigation and slideshow work without active internet connection per tenant profile"
+    },
+    "imageProcessing": {
+      "library": "sharp",
+      "outputs": [
+        {
+          "type": "thumbnail",
+          "size": "300x300",
+          "format": "webp",
+          "quality": 80,
+          "usage": "Circular category avatars"
+        },
+        {
+          "type": "fullscreen",
+          "maxDimension": 2560,
+          "format": "webp",
+          "quality": 85,
+          "usage": "High-resolution fullscreen slideshow presentation"
+        }
+      ]
+    },
+    "uiUx": {
+      "touchNavigation": {
+        "swipe": "Horizontal gesture navigation between photos",
+        "pinchToZoom": "Deep inspection of tattoo details",
+        "autoSlideshow": "Optional timer loop with instant tap-to-pause"
+      },
+      "categoryDrawer": {
+        "position": "Slide-out drawer (left/right panel)",
+        "elements": "Circular thumbnail avatars with category titles"
+      }
+    }
+  },
+  "databaseSchema": {
+    "models": [
+      {
+        "name": "Artist (Tenant)",
+        "fields": {
+          "id": "String (UUID / CUID, Primary Key)",
+          "name": "String",
+          "slug": "String (Unique - used for subdomains/urls, e.g., 'janedoe')",
+          "email": "String (Unique)",
+          "passwordHash": "String",
+          "avatarUrl": "String?",
+          "createdAt": "DateTime",
+          "updatedAt": "DateTime"
+        }
+      },
+      {
+        "name": "Category",
+        "fields": {
+          "id": "String (UUID / CUID, Primary Key)",
+          "artistId": "String (Foreign Key -> Artist.id, Indexed for Multi-Tenancy)",
+          "name": "String",
+          "slug": "String",
+          "avatarUrl": "String",
+          "createdAt": "DateTime",
+          "updatedAt": "DateTime"
+        },
+        "constraints": [
+          "Unique constraint on (artistId, slug)"
+        ]
+      },
+      {
+        "name": "Artwork",
+        "fields": {
+          "id": "String (UUID / CUID, Primary Key)",
+          "artistId": "String (Foreign Key -> Artist.id, Indexed for Multi-Tenancy)",
+          "categoryId": "String (Foreign Key -> Category.id)",
+          "title": "String?",
+          "displayUrl": "String",
+          "originalUrl": "String?",
+          "blurDataUrl": "String?",
+          "order": "Int (Default: 0)",
+          "createdAt": "DateTime",
+          "updatedAt": "DateTime"
+        },
+        "constraints": [
+          "Indexed by (artistId, categoryId)"
+        ]
+      }
+    ]
+  }
+}

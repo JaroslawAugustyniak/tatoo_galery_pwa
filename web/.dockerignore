@@ -1,0 +1,5 @@
+node_modules
+.next
+.env*
+public/sw.js*
+public/swe-worker*

@@ -1,0 +1,72 @@
+# Produkcyjny compose na serwerze. Uruchamiany przez GitHub Actions:
+#   docker compose --env-file .env --env-file image.env -f docker-compose.server.yml up -d
+# .env     - sekrety (tworzony ręcznie raz na serwerze, patrz DEPLOY.md)
+# image.env - IMAGE_REF=ghcr.io/<owner>/<repo>:<sha> (zapisywany przez workflow)
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: tattoogallery_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?ustaw w .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?ustaw w .env}
+      MYSQL_USER: ${MYSQL_USER:?ustaw w .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?ustaw w .env}
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - tattoogallery_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - default
+
+  app:
+    image: ${IMAGE_REF:?brak IMAGE_REF - użyj --env-file image.env}
+    container_name: tattoogallery_app
+    restart: unless-stopped
+    command: sh -c "npx prisma migrate deploy && npm start"
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+      UPLOAD_DIR: /data/uploads
+      SESSION_SECRET: ${SESSION_SECRET:?ustaw w .env}
+      COOKIE_SECURE: "true"
+      ROOT_DOMAIN: ${APP_DOMAIN:?ustaw w .env}
+      RESEND_API_KEY: ${RESEND_API_KEY:?ustaw w .env}
+      MAIL_FROM: ${MAIL_FROM:?ustaw w .env}
+      # nginx-proxy (+ acme-companion, jeśli używasz do certyfikatów)
+      VIRTUAL_HOST: ${APP_DOMAIN}
+      VIRTUAL_PORT: "3000"
+      LETSENCRYPT_HOST: ${APP_DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
+    volumes:
+      - tattoogallery_uploads:/data/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/auth/me').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - default
+      - nginx-proxy-network
+
+networks:
+  nginx-proxy-network:
+    external: true
+    name: nginx-proxy-network
+
+volumes:
+  tattoogallery_mysql_data:
+  tattoogallery_uploads:

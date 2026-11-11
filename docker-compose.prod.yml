@@ -1,0 +1,9 @@
+# Tryb produkcyjny (PWA/Service Worker działa tylko w buildzie produkcyjnym):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  app:
+    build:
+      target: prod
+    volumes: !override
+      - ./uploads:/data/uploads
+    command: sh -c "npx prisma migrate deploy && npm start"
