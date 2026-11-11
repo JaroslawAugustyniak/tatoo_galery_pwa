@@ -106,9 +106,8 @@ jobs:
           fi
           ssh deploy "cd '${DEPLOY_PATH}' \
             && echo 'IMAGE_REF=${IMAGE_REF}' > image.env \
-            && docker compose --env-file .env --env-file image.env -f docker-compose.server.yml pull app \
-            && docker compose --env-file .env --env-file image.env -f docker-compose.server.yml up -d --remove-orphans \
-            && docker image prune -f >/dev/null"
+            && docker compose --env-file .env --env-file image.env -f docker-compose.server.yml pull tattoogallery-web \
+            && docker compose --env-file .env --env-file image.env -f docker-compose.server.yml up -d"
 
       - name: Czekaj na zdrowy kontener
         run: |

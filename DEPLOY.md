@@ -82,10 +82,10 @@ mailem przez Resend – dlatego klucz Resend i zweryfikowana domena nadawcy są 
 ```bash
 cd ~/docker/tatoo_gallery
 alias dc='docker compose --env-file .env --env-file image.env -f docker-compose.server.yml'
-dc ps && dc logs -f app
+dc ps && dc logs -f tattoogallery-web
 
 # Rollback: wskaż poprzedni obraz (tag = SHA commita z GHCR)
-echo 'IMAGE_REF=ghcr.io/<owner>/<repo>:<poprzedni-sha>' > image.env && dc up -d app
+echo 'IMAGE_REF=ghcr.io/<owner>/<repo>:<poprzedni-sha>' > image.env && dc up -d tattoogallery-web
 ```
 
 Migracje wykonują się tylko „do przodu”. Rollback do obrazu ze starszym schematem bazy wymaga ręcznego
@@ -100,7 +100,16 @@ docker exec tattoogallery_db sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --
 docker run --rm -v tattoogallery_uploads:/data -v "$PWD":/out alpine tar czf /out/backup-uploads-$(date +%F).tgz -C /data .
 ```
 
-## 5. Uwagi
+## 5. Współdzielony serwer – zasady bezpieczeństwa
+
+- Projekt Compose ma stałą nazwę `tattoogallery`; workflow nie używa `--remove-orphans` ani `docker image prune`
+  (działałyby poza tym projektem).
+- Serwis nazywa się `tattoogallery-web`, bo nazwa serwisu to alias DNS w sieci NPM – nazwa `app` mogłaby
+  kolidować z innymi projektami. W NPM kieruj ruch na **nazwę kontenera** `tattoogallery_app`.
+- Kontenery mają limity pamięci (`MYSQL_MEM_LIMIT`, `APP_MEM_LIMIT`, domyślnie 768m każdy).
+- Awaryjne zatrzymanie tylko tej aplikacji: `dc down` (nie usuwa wolumenów).
+
+## 6. Uwagi
 
 - Subdomeny tatuatorów (`slug.domena`) nie są włączone: galerie działają pod `/t/slug`. Włączenie wymaga
   wildcard DNS i certyfikatu wildcard (DNS-01) oraz osobny Proxy Host z `*.domena`.
