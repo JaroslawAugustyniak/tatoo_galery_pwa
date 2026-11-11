@@ -59,6 +59,7 @@ haszami haseł i typem uwierzytelniania** (`mysql_native_password` / `caching_sh
 uprawnienia i porównuje liczbę wierszy każdej tabeli. Odmawia, jeśli baza docelowa już istnieje, i niczego
 nie usuwa w źródle. Aplikacje nie wymagają zmiany haseł – zmienia się tylko host bazy.
 
+Konkretna kolejnosc dla Waszych trzech projektow jest w [MIGRATION-RUNBOOK.md](MIGRATION-RUNBOOK.md).
 Skopiuj skrypt na serwer, a potem dla każdej aplikacji `S` (kontener bazy źródłowej `S_db`, aplikacji `S_app`):
 
 ```bash
@@ -66,7 +67,7 @@ Skopiuj skrypt na serwer, a potem dla każdej aplikacji `S` (kontener bazy źró
 docker stop S_app
 
 # b) migracja (hasła root podaj w zmiennych, nie w historii poleceń: read -rs)
-read -rsp "root źródła: " SRC_PWD; echo; read -rsp "root celu: " DST_PWD; echo; export SRC_PWD DST_PWD
+read -rsp "root zrodla: " SRC_PWD; echo; read -rsp "root celu: " DST_PWD; echo; export SRC_PWD DST_PWD
 ./migrate-db.sh S_db shared_mysql <baza> '<uzytkownik>@%'
 # skrypt kończy się kodem 0 tylko gdy wszystkie tabele się zgadzają
 

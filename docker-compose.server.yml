@@ -45,7 +45,7 @@ networks:
   # Sieć, w której działa Nginx Proxy Manager. W NPM wskaż: host tattoogallery_app, port 3000.
   proxy:
     external: true
-    name: ${PROXY_NETWORK:-nginx-proxy-network}
+    name: ${PROXY_NETWORK:-nginx-proxy-manager_default}
   # Sieć wspólnej bazy MySQL (musi istnieć, patrz docs/DB-CONSOLIDATION.md).
   db:
     external: true
