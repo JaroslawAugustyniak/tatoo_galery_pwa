@@ -30,8 +30,8 @@ ssh-keyscan -p 22 TWOJ_SERWER                          # -> sekret SSH_KNOWN_HOS
 ## 1. Baza danych
 
 Aplikacja nie uruchamia własnego MySQL – korzysta ze **wspólnej instancji** serwera (patrz
-[docs/DB-CONSOLIDATION.md](docs/DB-CONSOLIDATION.md)). W `.env` na serwerze podaj `DB_HOST` (nazwa kontenera
-MySQL), `DB_NETWORK` (wspólna sieć Dockera) oraz dane bazy `tattoogallery` i jej użytkownika.
+[docs/DB-CONSOLIDATION.md](docs/DB-CONSOLIDATION.md)). Domyślnie aplikacja łączy się z hostem `shared_mysql` przez sieć `db-net`
+(`DB_HOST`/`DB_NETWORK` w `.env` zmieniasz tylko przy innej nazwie). Utwórz w niej bazę `tattoogallery` i jej użytkownika.
 
 ## 1a. Nginx Proxy Manager
 

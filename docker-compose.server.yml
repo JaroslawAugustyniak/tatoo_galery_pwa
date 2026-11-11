@@ -21,7 +21,7 @@ services:
     environment:
       NODE_ENV: production
       # hasło bez znaków specjalnych (np. openssl rand -hex 16), bo trafia do URL-a
-      DATABASE_URL: mysql://${MYSQL_USER:?ustaw w .env}:${MYSQL_PASSWORD:?ustaw w .env}@${DB_HOST:?ustaw w .env}:${DB_PORT:-3306}/${MYSQL_DATABASE:?ustaw w .env}
+      DATABASE_URL: mysql://${MYSQL_USER:?ustaw w .env}:${MYSQL_PASSWORD:?ustaw w .env}@${DB_HOST:-shared_mysql}:${DB_PORT:-3306}/${MYSQL_DATABASE:?ustaw w .env}
       UPLOAD_DIR: /data/uploads
       SESSION_SECRET: ${SESSION_SECRET:?ustaw w .env}
       COOKIE_SECURE: "true"
@@ -49,7 +49,7 @@ networks:
   # Sieć wspólnej bazy MySQL (musi istnieć, patrz docs/DB-CONSOLIDATION.md).
   db:
     external: true
-    name: ${DB_NETWORK:?ustaw w .env}
+    name: ${DB_NETWORK:-db-net}
 
 volumes:
   tattoogallery_uploads:
