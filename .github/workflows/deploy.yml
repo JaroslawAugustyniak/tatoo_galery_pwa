@@ -67,7 +67,8 @@ jobs:
       cancel-in-progress: false
     env:
       SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/tattoo-gallery' }}
+      # ścieżka względna = względem katalogu domowego użytkownika SSH (~/docker/tatoo_gallery)
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || 'docker/tatoo_gallery' }}
     steps:
       - uses: actions/checkout@v4
 

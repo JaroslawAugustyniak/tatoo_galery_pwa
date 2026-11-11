@@ -6,13 +6,13 @@ Push na `main` uruchamia pipeline: **test** (`tsc`) → **build** obrazu (target
 ## 1. Jednorazowa konfiguracja serwera
 
 Wymagania: Docker + Compose v2, działający **nginx-proxy** (z acme-companion do certyfikatów) w sieci
-`nginx-proxy-network`, rekord DNS `A` domeny wskazujący na serwer. HTTPS jest obowiązkowy – bez niego
+`nginx-proxy-network`, rekord DNS `A` domeny `tatoo.asapcreative.agency` wskazujący na IP serwera. HTTPS jest obowiązkowy – bez niego
 Service Worker (tryb offline) i cookie sesji (`Secure`) nie zadziałają.
 
 ```bash
-sudo mkdir -p /opt/tattoo-gallery && sudo chown $USER /opt/tattoo-gallery
+mkdir -p ~/docker/tatoo_gallery
 docker network ls | grep nginx-proxy-network        # sieć musi istnieć
-cd /opt/tattoo-gallery
+cd ~/docker/tatoo_gallery
 # wzór: .env.server.example z repozytorium -> .env, uzupełnij WSZYSTKIE wartości
 chmod 600 .env
 openssl rand -hex 32                                 # wartość dla SESSION_SECRET
@@ -26,7 +26,7 @@ ssh-keygen -t ed25519 -f deploy_key -C "gh-actions-deploy" -N ""   # lokalnie
 ssh-keyscan -p 22 TWOJ_SERWER                          # -> sekret SSH_KNOWN_HOSTS
 ```
 
-## 2. Sekrety GitHub (Settings → Secrets and variables → Actions)
+## 2. Sekrety GitHub (repo `JaroslawAugustyniak/tatoo_galery_pwa` → Settings → Secrets and variables → Actions)
 
 Zalecane: environment **production** (Settings → Environments), opcjonalnie z wymaganą akceptacją.
 
@@ -38,7 +38,7 @@ Zalecane: environment **production** (Settings → Environments), opcjonalnie z 
 | `SSH_KNOWN_HOSTS` | secret | wynik `ssh-keyscan` |
 | `SSH_PORT` | secret (opcj.) | domyślnie 22 |
 | `GHCR_PULL_TOKEN` | secret (opcj.) | PAT (classic) z `read:packages`, jeśli pakiet w GHCR jest prywatny |
-| `DEPLOY_PATH` | variable (opcj.) | domyślnie `/opt/tattoo-gallery` |
+| `DEPLOY_PATH` | variable (opcj.) | domyślnie `docker/tatoo_gallery` (względem katalogu domowego) |
 
 Pakiet w GHCR jest domyślnie prywatny: albo podaj `GHCR_PULL_TOKEN`, albo po pierwszym buildzie ustaw
 widoczność pakietu na publiczną (Packages → ustawienia pakietu).
@@ -46,13 +46,13 @@ widoczność pakietu na publiczną (Packages → ustawienia pakietu).
 ## 3. Pierwszy deploy
 
 `git push origin main` (lub Actions → CI/CD → Run workflow). Po sukcesie galeria działa pod
-`https://APP_DOMAIN`, a panel pod `/admin`. Pierwsze konto zakłada się przez rejestrację (kod 2FA przyjdzie
+`https://tatoo.asapcreative.agency`, a panel pod `/admin`. Pierwsze konto zakłada się przez rejestrację (kod 2FA przyjdzie
 mailem przez Resend – dlatego klucz Resend i zweryfikowana domena nadawcy są wymagane w `.env`).
 
 ## 4. Operacje
 
 ```bash
-cd /opt/tattoo-gallery
+cd ~/docker/tatoo_gallery
 alias dc='docker compose --env-file .env --env-file image.env -f docker-compose.server.yml'
 dc ps && dc logs -f app
 
