@@ -96,3 +96,16 @@ GRANT ALL PRIVILEGES ON tattoogallery.* TO 'tattoo'@'%';
 ```
 Migracje Prisma wykonują się przy starcie kontenera (`prisma migrate deploy`) – użytkownik potrzebuje
 uprawnień do tworzenia i zmiany tabel w swojej bazie (stąd `ALL` na tej jednej bazie).
+
+## 5. Dostep z zewnatrz (Navicat, DBeaver) - tunel SSH
+
+Baza nasluchuje na serwerze tylko pod `127.0.0.1:3310` (nie jest dostepna z internetu). Klient laczy sie
+przez tunel SSH:
+
+- **Navicat:** polaczenie MySQL -> zakladka *General*: Host `127.0.0.1`, Port `3310`, uzytkownik i haslo bazy;
+  zakladka *SSH*: zaznacz *Use SSH tunnel*, Host = adres serwera, Port 22, User = Twoj uzytkownik SSH,
+  Authentication = *Public Key* i Twoj klucz prywatny (nie klucz deployowy GitHub Actions).
+- **Z terminala:** `ssh -N -L 3310:127.0.0.1:3310 UZYTKOWNIK@SERWER`, a w kliencie Host `127.0.0.1`, Port `3310`.
+
+Do codziennej pracy uzywaj uzytkownika konkretnej aplikacji (widzi tylko swoja baze). Konto `root` zostaw
+do administracji. Nie otwieraj portu 3310 w firewallu ani nie zmieniaj mapowania na `0.0.0.0`.

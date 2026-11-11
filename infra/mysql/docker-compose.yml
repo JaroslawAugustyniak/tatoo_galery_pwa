@@ -1,6 +1,7 @@
 # Wspolna instancja MySQL serwera. Osobny projekt Compose (~/docker/mysql), niezalezny od aplikacji.
 # Aplikacje dolaczaja do sieci "db-net" (external: true) i lacza sie z hostem "shared_mysql".
-# Baza NIE jest wystawiona na port hosta.
+# Port 3310 jest przypiety TYLKO do 127.0.0.1 serwera (dostep z zewnatrz wylacznie tunelem SSH, np. Navicat).
+# NIE zmieniaj na "3310:3306" - to wystawiloby baze do internetu.
 # (Plik celowo ASCII-only: wklejanie znakow spoza ASCII przez terminal SSH psuje YAML.)
 name: mysql
 
@@ -18,6 +19,8 @@ services:
       --performance-schema=OFF
       --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-192M}
       --max-connections=100
+    ports:
+      - "127.0.0.1:3310:3306"
     volumes:
       - shared_mysql_data:/var/lib/mysql
     healthcheck:
