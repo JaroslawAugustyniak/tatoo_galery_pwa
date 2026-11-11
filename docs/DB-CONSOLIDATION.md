@@ -41,47 +41,35 @@ oraz `mem_limit: 1g`. Przy zmianie `command:` kontener się zrestartuje – zró
 
 ## 2. Migracja jednej bazy (powtórz dla każdej)
 
-Przykład: serwis `S` z kontenerem MySQL `S_db`, bazą `S_DB`, aplikacją `S_app`.
+Skrypt [scripts/migrate-db.sh](../scripts/migrate-db.sh) robi zrzut, import, przenosi użytkowników **razem z
+haszami haseł i typem uwierzytelniania** (`mysql_native_password` / `caching_sha2_password`), kopiuje
+uprawnienia i porównuje liczbę wierszy każdej tabeli. Odmawia, jeśli baza docelowa już istnieje, i niczego
+nie usuwa w źródle. Aplikacje nie wymagają zmiany haseł – zmienia się tylko host bazy.
+
+Skopiuj skrypt na serwer, a potem dla każdej aplikacji `S` (kontener bazy źródłowej `S_db`, aplikacji `S_app`):
 
 ```bash
 # a) zamroź zapisy: zatrzymaj TYLKO aplikację (baza działa)
 docker stop S_app
 
-# b) zrzut spójny, z procedurami i triggerami
-docker exec -e MYSQL_PWD="$SRC_ROOT" S_db mysqldump -uroot --single-transaction --routines --triggers \
-  --default-character-set=utf8mb4 --databases S_DB > S_DB.sql
-ls -lh S_DB.sql && tail -3 S_DB.sql          # musi kończyć się linią "-- Dump completed"
+# b) migracja (hasła root podaj w zmiennych, nie w historii poleceń: read -rs)
+read -rsp "root źródła: " SRC_PWD; echo; read -rsp "root celu: " DST_PWD; echo; export SRC_PWD DST_PWD
+./migrate-db.sh S_db <kontener_docelowy> <baza> '<uzytkownik>@%'
+# skrypt kończy się kodem 0 tylko gdy wszystkie tabele się zgadzają
 
-# c) na instancji docelowej: import (--databases w zrzucie samo tworzy bazę)
-docker exec -i -e MYSQL_PWD="$DST_ROOT" DST_DB mysql -uroot < S_DB.sql
+# c) przepnij aplikację: w jej compose/.env zmień host bazy na nazwę kontenera docelowego,
+#    dodaj do jej kontenera sieć db-net (external: true), usuń z jej compose serwis MySQL. Potem:
+docker compose up -d && docker compose logs --tail 50 S_app     # sprawdź, czy działa
 
-# d) użytkownik tylko do tej bazy (hasło: openssl rand -hex 16)
-docker exec -i -e MYSQL_PWD="$DST_ROOT" DST_DB mysql -uroot <<SQL
-CREATE USER 'S_user'@'%' IDENTIFIED BY '<haslo>';
-GRANT ALL PRIVILEGES ON \`S_DB\`.* TO 'S_user'@'%';
-FLUSH PRIVILEGES;
-SQL
-```
-Starsze aplikacje (PHP/Laravel ze starym sterownikiem) mogą wymagać
-`IDENTIFIED WITH mysql_native_password BY '...'` – sprawdź w inwentaryzacji kolumnę `plugin`.
-
-```bash
-# e) weryfikacja: liczba tabel i wierszy musi się zgadzać ze źródłem
-Q="SELECT table_name, table_rows FROM information_schema.tables WHERE table_schema='S_DB' ORDER BY 1;"
-diff <(docker exec -e MYSQL_PWD="$SRC_ROOT" S_db mysql -uroot -N -e "$Q") \
-     <(docker exec -e MYSQL_PWD="$DST_ROOT" DST_DB mysql -uroot -N -e "$Q") && echo "zgodne"
-```
-(`table_rows` w InnoDB jest przybliżone; dla ważnych tabel dodatkowo porównaj `SELECT COUNT(*)`.)
-
-```bash
-# f) przepnij aplikację: w jej compose/.env zmień host bazy na nazwę kontenera docelowego (DST_DB),
-#    dodaj do jej kontenera sieć db-net (external), usuń z jej compose serwis MySQL,
-#    zaktualizuj użytkownika/hasło. Potem:
-docker compose up -d && docker compose logs --tail 50 app   # sprawdź, czy łączy się i działa
-
-# g) dopiero po testach: zatrzymaj stary S_db, a po tygodniu usuń kontener i wolumen
+# d) dopiero po testach: zatrzymaj stary S_db; kontener i wolumen usuń po ok. tygodniu
 docker stop S_db
 ```
+
+Użytkowników podaj w postaci `user@host` (host tak, jak w `mysql.user`, zwykle `%`). Listę znajdziesz w
+inwentaryzacji (sekcja 0). Zrzut `.sql` zostaje w katalogu, z którego uruchomiłeś skrypt – to dodatkowa kopia.
+
+> Uwaga: bazy z użytkownikami `caching_sha2_password` i `mysql_native_password` mogą współistnieć w jednej
+> instancji. W MySQL 8.0 oba pluginy są aktywne; w 8.4+ `mysql_native_password` jest domyślnie wyłączony.
 
 ## 3. Nowe serwisy (w tym Tattoo Gallery)
 

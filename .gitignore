@@ -10,3 +10,4 @@ images_krzyk/
 *:Zone.Identifier
 web/public/sw.js*
 web/public/swe-worker*
+*.sql
