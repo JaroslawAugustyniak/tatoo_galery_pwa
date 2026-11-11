@@ -99,7 +99,7 @@ przywrócenia kopii bazy.
 
 ### Kopie zapasowe
 
-Baza jest we wspólnej instancji MySQL – jej kopie opisuje [docs/DB-CONSOLIDATION.md](docs/DB-CONSOLIDATION.md#4-kopie-zapasowe-wspólnej-instancji-cron).
+Baza jest we wspólnej instancji MySQL – jej kopie opisuje [docs/DB-CONSOLIDATION.md](infra/mysql/backup.sh).
 Zdjęcia (wolumen uploadów tej aplikacji):
 
 ```bash

@@ -1,0 +1,36 @@
+# Wspólna instancja MySQL serwera. Osobny projekt Compose (~/docker/mysql) – niezależny od aplikacji.
+# Aplikacje dołączają do sieci "db-net" (external: true) i łączą się z hostem "shared_mysql".
+# Baza NIE jest wystawiona na port hosta.
+name: mysql
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: shared_mysql
+    restart: unless-stopped
+    mem_limit: ${MYSQL_MEM_LIMIT:-768m}
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?ustaw w .env}
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --performance-schema=OFF
+      --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-192M}
+      --max-connections=100
+    volumes:
+      - shared_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - db
+
+networks:
+  db:
+    name: db-net
+
+volumes:
+  shared_mysql_data:

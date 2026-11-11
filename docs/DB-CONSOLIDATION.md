@@ -23,21 +23,34 @@ docker exec -e MYSQL_PWD="$P" $C mysql -uroot -e "SELECT VERSION();
 Sprawdź kolizje nazw baz między instancjami (dwie aplikacje z bazą `app` itp.) – przy kolizji jedną
 z baz nazwij inaczej i zmień jej nazwę w konfiguracji aplikacji.
 
-## 1. Wybór instancji docelowej i sieć wspólna
+## 1. Nowa, osobna instancja wspólna
 
-Zostaje instancja jednego z serwisów (ta z danymi, które mają zostać). Zalecenie: wersja 8.0, ta
-najstabilniejsza i najlepiej utrzymywana.
+Wspólna baza to **osobny projekt Compose** ([infra/mysql/](../infra/mysql/)), niezależny od aplikacji.
+Dzięki temu zatrzymanie, aktualizacja czy usunięcie dowolnej aplikacji nie dotyka bazy pozostałych.
+Obecne instancje (np. 3 istniejące) stają się wyłącznie **źródłami migracji**.
 
 ```bash
-docker network create db-net                      # raz
-docker network connect db-net <kontener_docelowy> # działa od razu
+mkdir -p ~/docker/mysql && cd ~/docker/mysql
+# skopiuj z repozytorium: docker-compose.yml, .env.example (-> .env), backup.sh
+cp .env.example .env && chmod 600 .env && nano .env      # MYSQL_ROOT_PASSWORD: openssl rand -hex 16
+free -h                                                  # PRZED startem: available > ok. 700 MB
+docker compose up -d && docker compose ps               # sieć db-net tworzy ten projekt
 ```
-Utrwal to w compose tego serwisu (sekcja `networks:` kontenera MySQL: `db-net` jako `external: true`),
-inaczej połączenie zniknie po jego odtworzeniu. Instancji nie wystawiaj na port hosta.
 
-Ustawienia oszczędzające pamięć (parametry `command:` kontenera docelowego):
-`--performance-schema=OFF --innodb-buffer-pool-size=256M --max-connections=100`
-oraz `mem_limit: 1g`. Przy zmianie `command:` kontener się zrestartuje – zrób to w oknie serwisowym.
+Instancja ma `performance_schema=OFF`, `innodb_buffer_pool_size=192M` i `mem_limit` 768 MB; bazy są
+rzędu MB, więc to z zapasem wystarcza. Port nie jest wystawiony na hosta, dostęp tylko przez `db-net`.
+
+**Pamięć podczas migracji:** nowa instancja działa równolegle ze starymi, dopóki ich nie wyłączysz.
+Migruj po jednej bazie i po każdej zatrzymaj stary MySQL (krok `d` w sekcji 2) – pamięć zwalnia się
+stopniowo. Jeśli `free -h` pokazuje mniej niż ~700 MB, najpierw zatrzymaj coś nieużywanego.
+
+**Kopie zapasowe** (obowiązkowe, bo to jedna instancja dla wszystkich):
+```bash
+chmod +x backup.sh && ./backup.sh            # test: tworzy backups/all-<data>.sql.gz i sprawdza go
+crontab -e                                   # 15 3 * * * /home/<user>/docker/mysql/backup.sh >> /home/<user>/docker/mysql/backup.log 2>&1
+```
+Skrypt weryfikuje kopię (gzip + znacznik „Dump completed”) i rotuje pliki starsze niż 14 dni. Zadbaj,
+żeby katalog `backups/` trafiał też poza serwer (rsync/rclone) – kopia na tym samym dysku nie chroni przed jego awarią.
 
 ## 2. Migracja jednej bazy (powtórz dla każdej)
 
@@ -54,10 +67,10 @@ docker stop S_app
 
 # b) migracja (hasła root podaj w zmiennych, nie w historii poleceń: read -rs)
 read -rsp "root źródła: " SRC_PWD; echo; read -rsp "root celu: " DST_PWD; echo; export SRC_PWD DST_PWD
-./migrate-db.sh S_db <kontener_docelowy> <baza> '<uzytkownik>@%'
+./migrate-db.sh S_db shared_mysql <baza> '<uzytkownik>@%'
 # skrypt kończy się kodem 0 tylko gdy wszystkie tabele się zgadzają
 
-# c) przepnij aplikację: w jej compose/.env zmień host bazy na nazwę kontenera docelowego,
+# c) przepnij aplikację: w jej compose/.env zmień host bazy na `shared_mysql`,
 #    dodaj do jej kontenera sieć db-net (external: true), usuń z jej compose serwis MySQL. Potem:
 docker compose up -d && docker compose logs --tail 50 S_app     # sprawdź, czy działa
 
@@ -73,7 +86,7 @@ inwentaryzacji (sekcja 0). Zrzut `.sql` zostaje w katalogu, z którego uruchomi�
 
 ## 3. Nowe serwisy (w tym Tattoo Gallery)
 
-Na instancji docelowej utwórz bazę i użytkownika, a w `.env` aplikacji ustaw `DB_HOST`, `DB_NETWORK=db-net`:
+Na wspólnej instancji (`docker exec -it shared_mysql mysql -uroot -p`) utwórz bazę i użytkownika, a w `.env` aplikacji ustaw `DB_HOST=shared_mysql`, `DB_NETWORK=db-net`:
 
 ```sql
 CREATE DATABASE tattoogallery CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -82,11 +95,3 @@ GRANT ALL PRIVILEGES ON tattoogallery.* TO 'tattoo'@'%';
 ```
 Migracje Prisma wykonują się przy starcie kontenera (`prisma migrate deploy`) – użytkownik potrzebuje
 uprawnień do tworzenia i zmiany tabel w swojej bazie (stąd `ALL` na tej jednej bazie).
-
-## 4. Kopie zapasowe wspólnej instancji (cron)
-
-```bash
-docker exec -e MYSQL_PWD="$DST_ROOT" DST_DB mysqldump -uroot --single-transaction --routines --triggers \
-  --all-databases | gzip > /backup/mysql-$(date +%F).sql.gz
-```
-Przed pierwszą migracją zrób kopię **każdej** instancji, z której będziesz przenosić dane.
