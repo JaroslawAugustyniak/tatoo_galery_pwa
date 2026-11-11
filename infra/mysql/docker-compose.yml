@@ -1,6 +1,7 @@
-# Wspólna instancja MySQL serwera. Osobny projekt Compose (~/docker/mysql) – niezależny od aplikacji.
-# Aplikacje dołączają do sieci "db-net" (external: true) i łączą się z hostem "shared_mysql".
+# Wspolna instancja MySQL serwera. Osobny projekt Compose (~/docker/mysql), niezalezny od aplikacji.
+# Aplikacje dolaczaja do sieci "db-net" (external: true) i lacza sie z hostem "shared_mysql".
 # Baza NIE jest wystawiona na port hosta.
+# (Plik celowo ASCII-only: wklejanie znakow spoza ASCII przez terminal SSH psuje YAML.)
 name: mysql
 
 services:
