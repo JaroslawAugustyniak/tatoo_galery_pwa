@@ -312,7 +312,7 @@ export default function Slideshow({ artworks, index, onIndexChange, autoplayMs =
         <button
           onClick={() => setZoom({ scale: 1, x: 0, y: 0 })}
           onPointerDown={(e) => e.stopPropagation()}
-          className="absolute right-4 top-16 rounded-full bg-black/60 px-4 py-2 text-sm"
+          className="absolute right-4 top-[calc(max(1rem,env(safe-area-inset-top))+3.75rem)] rounded-full bg-black/60 px-4 py-2 text-sm"
         >
           Reset zoomu
         </button>
