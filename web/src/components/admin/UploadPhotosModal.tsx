@@ -20,7 +20,7 @@ export default function UploadPhotosModal({
   categoryId: string;
   categoryName: string;
   onClose: () => void;
-  onUploaded: () => void;
+  onUploaded: () => void | Promise<void>;
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<Status[]>([]);
@@ -66,8 +66,8 @@ export default function UploadPhotosModal({
 
     setProcessing(false);
     setRunning(false);
+    await onUploaded();
     setFinished(true);
-    onUploaded();
   };
 
   const percent = (sentBytes / totalBytes) * 100;

@@ -11,7 +11,7 @@ type Props = {
   /** brak = tworzenie nowej kategorii (nazwa + plik avatara), jest = edycja nazwy */
   category?: CategoryDTO;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
 };
 
 export default function CategoryFormModal({ category, onClose, onSaved }: Props) {
@@ -55,7 +55,7 @@ export default function CategoryFormModal({ category, onClose, onSaved }: Props)
       const err = await api(`/api/categories/${category.id}`, "PATCH", { name });
       setBusy(false);
       if (err) return setError(err);
-      onSaved();
+      await onSaved();
       return onClose();
     }
 
@@ -67,7 +67,7 @@ export default function CategoryFormModal({ category, onClose, onSaved }: Props)
     setBusy(false);
     setProcessing(false);
     if (!res.ok) return setError(res.data?.error ?? `Błąd ${res.status}`);
-    onSaved();
+    await onSaved();
     onClose();
   };
 

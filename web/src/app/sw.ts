@@ -4,6 +4,7 @@ import {
   CacheFirst,
   ExpirationPlugin,
   Serwist,
+  NetworkOnly,
   StaleWhileRevalidate,
   type PrecacheEntry,
   type SerwistGlobalConfig,
@@ -32,6 +33,11 @@ const serwist = new Serwist({
           new ExpirationPlugin({ maxEntries: 2000, maxAgeSeconds: 365 * 24 * 3600 }),
         ],
       }),
+    },
+    {
+      // Panel administracyjny odświeża dane z ?fresh=<znacznik> – zawsze aktualne, bez zapisu do cache
+      matcher: ({ url }) => /^\/api\/t\/[^/]+\/gallery$/.test(url.pathname) && url.searchParams.has("fresh"),
+      handler: new NetworkOnly(),
     },
     {
       // Dane galerii tenanta: pokaż z cache, odśwież w tle

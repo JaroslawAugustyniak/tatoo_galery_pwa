@@ -32,9 +32,16 @@ function Dashboard({ me, onMeChange, onLogout }: { me: Me; onMeChange: (me: Me) 
   const [loaded, setLoaded] = useState(false);
 
   const reload = useCallback(async () => {
-    const g: GalleryDTO = await fetch(`/api/t/${me.slug}/gallery`, { cache: "no-store" }).then((r) => r.json());
-    setCategories(g.categories);
-    setLoaded(true);
+    try {
+      const res = await fetch(`/api/t/${me.slug}/gallery?fresh=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const g: GalleryDTO = await res.json();
+      setCategories(g.categories);
+    } catch {
+      /* brak sieci – zostają poprzednie dane */
+    } finally {
+      setLoaded(true);
+    }
   }, [me.slug]);
   useEffect(() => {
     reload().catch(() => undefined);

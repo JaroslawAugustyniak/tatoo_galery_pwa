@@ -7,6 +7,10 @@ import type { GalleryDTO } from "@/lib/types";
 
 type Props = { slug: string; artistName: string };
 
+// Nazwy cache muszą być takie same jak w src/app/sw.ts
+const MEDIA_CACHE = "gallery-media";
+const DATA_CACHE = "gallery-data";
+
 // Fullscreen API z prefiksem WebKit (iPadOS/Safari). iPhone nie wspiera pełnego ekranu dla stron – tam przycisk się nie pojawi.
 type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> };
 type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
@@ -20,12 +24,19 @@ export default function GalleryShell({ slug, artistName }: Props) {
   const [drawer, setDrawer] = useState(false);
   const [fsSupported, setFsSupported] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const [sync, setSync] = useState<{ done: number; total: number } | null>(null);
+  const [sync, setSync] = useState<{ done: number; total: number; failed: number } | null>(null);
 
-  // Dane: SW (StaleWhileRevalidate) zwraca cache także offline
+  // Dane: SW (StaleWhileRevalidate) zwraca cache także offline.
+  // Dodatkowo zapisujemy odpowiedź sami – przy pierwszej wizycie SW jeszcze nie kontroluje strony i nic by nie zbuforował.
   useEffect(() => {
-    fetch(`/api/t/${slug}/gallery`)
-      .then((r) => (r.ok ? (r.json() as Promise<GalleryDTO>) : Promise.reject()))
+    const url = `/api/t/${slug}/gallery`;
+    fetch(url)
+      .then((r) => {
+        if (!r.ok) return Promise.reject();
+        const copy = r.clone();
+        if ("caches" in window) caches.open(DATA_CACHE).then((c) => c.put(url, copy)).catch(() => undefined);
+        return r.json() as Promise<GalleryDTO>;
+      })
       .then((g) => {
         setGallery(g);
         setActiveId((cur) => cur ?? g.categories[0]?.id ?? null);
@@ -33,29 +44,71 @@ export default function GalleryShell({ slug, artistName }: Props) {
       .catch(() => setError(true));
   }, [slug]);
 
-  // "Pierwsza synchronizacja": pobierz wszystkie obrazy, SW zapisze je w cache (Cache-First)
+  // "Pierwsza synchronizacja": zapisz wszystkie obrazy w pamięci urządzenia (Cache API, ten sam cache co CacheFirst w SW).
+  // Zapis robimy sami, więc działa od pierwszej wizyty – nie zależy od tego, czy SW zdążył przejąć stronę.
   useEffect(() => {
     if (!gallery) return;
+    if (!("caches" in window) || !window.isSecureContext) {
+      setSync({ done: 0, total: 0, failed: -1 });
+      return;
+    }
     const urls = [
       ...(gallery.logoUrl ? [gallery.logoUrl] : []),
       ...gallery.categories.flatMap((c) => [c.avatarUrl, ...c.artworks.map((a) => a.displayUrl)]),
-    ];
-    if (urls.length === 0) return;
+    ].filter((u): u is string => Boolean(u));
+    const unique = Array.from(new Set(urls));
+    if (unique.length === 0) return;
+
     let cancelled = false;
     let done = 0;
-    const queue = [...urls];
-    setSync({ done: 0, total: urls.length });
-    const worker = async () => {
-      while (queue.length && !cancelled) {
-        await fetch(queue.shift()!).catch(() => undefined);
-        if (!cancelled) setSync({ done: ++done, total: urls.length });
+    let failed = 0;
+    const queue = [...unique];
+    setSync({ done: 0, total: unique.length, failed: 0 });
+
+    // prosimy przeglądarkę o trwały zapis (bez tego stare tablety potrafią czyścić cache przy braku miejsca)
+    navigator.storage?.persist?.().catch(() => undefined);
+
+    (async () => {
+      const cache = await caches.open(MEDIA_CACHE);
+      const worker = async () => {
+        while (queue.length && !cancelled) {
+          const u = queue.shift()!;
+          try {
+            if (!(await cache.match(u))) {
+              const res = await fetch(u);
+              if (!res.ok) throw new Error(String(res.status));
+              await cache.put(u, res);
+            }
+          } catch {
+            failed++;
+          }
+          if (!cancelled) setSync({ done: ++done, total: unique.length, failed });
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      if (cancelled) return;
+      // strona i dane muszą przejść przez SW, żeby zostały zapisane (HTML bez tego nie otworzy się offline)
+      if ("serviceWorker" in navigator) {
+        try {
+          await navigator.serviceWorker.ready;
+          if (!navigator.serviceWorker.controller) {
+            await new Promise<void>((res) => {
+              navigator.serviceWorker.addEventListener("controllerchange", () => res(), { once: true });
+              setTimeout(res, 4000);
+            });
+          }
+          await fetch(`/api/t/${slug}/gallery`).catch(() => undefined);
+          await fetch(window.location.pathname, { headers: { Accept: "text/html" } }).catch(() => undefined);
+        } catch {
+          /* SW niedostępny */
+        }
       }
-    };
-    Promise.all([worker(), worker(), worker()]).then(() => !cancelled && setTimeout(() => setSync(null), 2500));
+      if (!cancelled && failed === 0) setTimeout(() => !cancelled && setSync(null), 3500);
+    })();
     return () => {
       cancelled = true;
     };
-  }, [gallery]);
+  }, [gallery, slug]);
 
   // Pełny ekran: wykrycie wsparcia + śledzenie stanu (także gdy użytkownik wyjdzie klawiszem Esc)
   useEffect(() => {
@@ -150,7 +203,13 @@ export default function GalleryShell({ slug, artistName }: Props) {
 
       {sync && (
         <div className="pointer-events-none absolute right-4 top-[calc(max(1rem,env(safe-area-inset-top))+3.75rem)] z-30 rounded-full bg-black/60 px-3 py-2 text-xs text-neutral-300">
-          {sync.done < sync.total ? `Offline: ${sync.done}/${sync.total}` : "✓ Dostępne offline"}
+          {sync.failed < 0
+            ? "Offline niedostępny (wymagane HTTPS)"
+            : sync.done < sync.total
+              ? `Offline: ${sync.done}/${sync.total}`
+              : sync.failed > 0
+                ? `Offline: nie zapisano ${sync.failed} zdjęć`
+                : "✓ Dostępne offline"}
         </div>
       )}
 

@@ -12,7 +12,7 @@ type Props = {
   categoryId: string;
   categories: CategoryDTO[];
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
 };
 
 export default function ArtworkEditModal({ artwork, categoryId, categories, onClose, onSaved }: Props) {
@@ -59,7 +59,7 @@ export default function ArtworkEditModal({ artwork, categoryId, categories, onCl
     const err = await api(`/api/artworks/${artwork.id}`, "PATCH", { title, ...(target !== categoryId && { categoryId: target }) });
     setBusy(false);
     if (err) return setError(err);
-    onSaved();
+    await onSaved();
     onClose();
   };
 

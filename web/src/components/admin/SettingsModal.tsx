@@ -78,10 +78,10 @@ export default function SettingsModal({ me, onClose, onMeChange }: Props) {
       <div className="space-y-6">
         <section className="space-y-3">
           <h3 className="text-sm font-medium uppercase tracking-wide text-neutral-400">Logo</h3>
-          <div className="grid h-28 place-items-center rounded-xl bg-neutral-800 p-3">
+          <div className="grid min-h-28 place-items-center rounded-xl bg-neutral-800 p-3">
             {me.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={me.logoUrl} alt="Logo studia" className="max-h-full max-w-full object-contain" />
+              <img src={me.logoUrl} alt="Logo studia" className="block h-auto max-h-60 w-auto max-w-full object-contain" />
             ) : (
               <span className="text-sm text-neutral-500">Brak logo</span>
             )}
