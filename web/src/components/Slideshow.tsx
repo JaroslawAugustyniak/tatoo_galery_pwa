@@ -17,11 +17,11 @@ const MAX_SCALE = 5;
 type Effect = "slide" | "fade" | "tiles" | "strips";
 type Mode = Effect | "random";
 const MODES: { value: Mode; label: string }[] = [
-  { value: "slide", label: "Przesuwanie" },
-  { value: "fade", label: "Zanikanie" },
-  { value: "tiles", label: "Odwracane kafelki" },
-  { value: "strips", label: "Zjeżdżające paski" },
-  { value: "random", label: "Losowa" },
+  { value: "slide", label: "Slide" },
+  { value: "fade", label: "Fade" },
+  { value: "tiles", label: "Flippable tiles" },
+  { value: "strips", label: "Slipping straps" },
+  { value: "random", label: "Random mode" },
 ];
 const EFFECTS: Effect[] = ["slide", "fade", "tiles", "strips"];
 const STORAGE_KEY = "gallery-transition";
